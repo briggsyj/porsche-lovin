@@ -2,7 +2,7 @@
 export function createDebug({ stage, surface }) {
   const el = document.createElement('div');
   el.className = 'debug';
-  el.innerHTML = '<div><button data-m="none">off</button><button data-m="depth">depth</button><button data-m="normal">normal</button><button data-m="mask">mask</button><button data-m="mesh">mesh</button></div><pre>move over the image</pre>';
+  el.innerHTML = '<div><button data-m="none">off</button><button data-m="depth">depth</button><button data-m="normal">normal</button><button data-m="mask">mask</button><button data-m="ao">ao</button></div><pre>move over the image</pre>';
   document.body.appendChild(el);
   const pre = el.querySelector('pre');
 
@@ -22,7 +22,7 @@ export function createDebug({ stage, surface }) {
     pre.textContent =
       `uv      ${f(uv.u)}, ${f(uv.v)}\n` +
       `depth   ${f(s.depth)} (median ${f(surface.median)})${s.blank ? '  BLANK' : ''}${s.masked ? '  OFF-MASK' : ''}\n` +
-      `normal  ${f(n.x)}, ${f(n.y)}, ${f(n.z)} (${n.kept}/${n.total} samples)\n` +
+      `normal  ${f(n.x)}, ${f(n.y)}, ${f(n.z)}  (${n.kept}/${n.total} samples)\n` +
       `scale   ${f(s.scale)}x\n` +
       `tilt    ${Math.round((Math.atan2(n.y, n.x) * 180) / Math.PI)}deg  squash ${f(n.z)}`;
   });

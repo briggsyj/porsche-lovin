@@ -3,7 +3,7 @@ import { createDecal } from './decal.js';
 
 // The canvas: draws the car, then every kiss. Kisses are stored as sampled surface data
 // (not pixels), so resizing just replays them and the count is unlimited.
-export function createStage({ canvas, carImg, kissImg, surface, onKiss }) {
+export function createStage({ canvas, carImg, kissImg, surface, onKiss, onFit = () => {} }) {
   const ctx = canvas.getContext('2d');
   const decal = createDecal({ kissImg, carImg, surface });
   const aspect = carImg.naturalWidth / carImg.naturalHeight;
@@ -15,13 +15,13 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss }) {
   let liftPending = false;
   let resizeTimer = 0;
 
-  const drawKiss = (k) => decal.draw(ctx, k, cssW, cssH, dpr, overlay === 'mesh');
+  const drawKiss = (k) => decal.draw(ctx, k, cssW, cssH, dpr);
 
   function redraw() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(carImg, 0, 0, cssW, cssH);
     for (const k of kisses) drawKiss(k);
-    const overlayCanvas = { depth: surface.depthCanvas, normal: surface.normalCanvas, mask: surface.maskCanvas }[overlay];
+    const overlayCanvas = { depth: surface.depthCanvas, normal: surface.normalCanvas, mask: surface.maskCanvas, ao: surface.aoCanvas }[overlay];
     if (overlayCanvas) {
       ctx.globalAlpha = 0.7;
       ctx.drawImage(overlayCanvas, 0, 0, cssW, cssH);
@@ -31,7 +31,7 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss }) {
 
   function fit() {
     const availW = window.innerWidth * 0.94 - 16;
-    const availH = window.innerHeight * 0.8 - 16;
+    const availH = window.innerHeight - (window.innerHeight * 0.065 + 28) - 100 - 24; // minus valance above, candles below
     cssW = Math.max(120, Math.floor(Math.min(availW, availH * aspect)));
     cssH = Math.floor(cssW / aspect);
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -40,6 +40,7 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss }) {
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     redraw();
+    onFit();
   }
 
   function uvAt(clientX, clientY) {
@@ -65,7 +66,7 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss }) {
     if (s.blank || s.masked) return; // black in the depth map or the mask: nothing to kiss
     const kiss = { u: uv.u, v: uv.v, scale: s.scale, spin, normal: s.footprint };
     kisses.push(kiss);
-    if (overlay === 'depth' || overlay === 'normal' || overlay === 'mask') redraw();
+    if (overlay === 'depth' || overlay === 'normal' || overlay === 'mask' || overlay === 'ao') redraw();
     else { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); drawKiss(kiss); }
     onKiss();
   }

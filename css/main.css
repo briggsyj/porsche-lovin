@@ -1,5 +1,6 @@
 :root {
   --light: 1;
+  --spot-lift: .45; /* how much the spotlight brings the car back up as the room dims */
   --gold: #d8b25a;
 }
 
@@ -78,7 +79,7 @@ html.locked #app { display: none; }
   z-index: 3;
   display: grid;
   place-items: center;
-  padding: calc(6.5vh + 28px) 3vw 3vh;
+  padding: calc(6.5vh + 28px) 3vw 100px; /* bottom space is for the candles */
 }
 #stage {
   display: block;
@@ -98,6 +99,20 @@ html.locked #app { display: none; }
   background: radial-gradient(ellipse 62% 56% at 50% 58%,
     rgb(0 0 0 / calc((1 - var(--light)) * .22)) 0%,
     rgb(0 0 0 / calc((1 - var(--light)) * .94)) 100%);
+}
+/* A gentle spotlight over the car: re-brightens whatever is behind it, only inside the (feathered) car
+   mask, and only as far as the room is dimmed. Positioned and masked by js/spotlight.js. */
+.spot {
+  position: fixed;
+  z-index: 6;
+  pointer-events: none;
+  -webkit-backdrop-filter: brightness(calc(1 + (1 - var(--light)) * var(--spot-lift)));
+  backdrop-filter: brightness(calc(1 + (1 - var(--light)) * var(--spot-lift)));
+  background: rgb(255 214 150 / calc((1 - var(--light)) * .07));
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 .lights { position: fixed; top: 0; left: 0; right: 0; height: 0; z-index: 7; pointer-events: none; }
 .lamp {
@@ -144,6 +159,14 @@ html.locked #app { display: none; }
 }
 #follower.on { opacity: 1; }
 #follower { --k: 0; }
+/* Flips (card-style, about the lips) when the cursor is in the right half of the image. */
+#follower .body {
+  position: relative;
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform .18s ease-in-out;
+}
+#follower .body.flipped { transform: perspective(900px) rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) { #follower .body { transition: none; } }
 #follower.kiss { --k: 1; }
 #follower img {
   display: block;
@@ -172,3 +195,94 @@ body.play, body.play * { cursor: none; }
 .debug button { font: inherit; margin-right: 4px; }
 .debug pre { margin: 6px 0 0; min-width: 24ch; }
 body.play .debug, body.play .debug * { cursor: auto; }
+
+/* ---- candles ---- */
+.candles {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 108px;
+  z-index: 7; /* above the dimming layer: candles stay lit, and glow more as the room goes dark */
+  pointer-events: none;
+}
+.candles::before { /* soft shadow on the floor they stand on */
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 34px;
+  background: linear-gradient(transparent, rgb(0 0 0 / .55));
+}
+.candle {
+  position: absolute;
+  bottom: var(--y, 0px);
+  left: var(--x, 0px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%) scale(var(--s, 1));
+  transform-origin: 50% 100%;
+}
+.candle::after { /* contact shadow */
+  content: '';
+  position: absolute;
+  left: -20%; right: -20%; bottom: -3px;
+  height: 8px;
+  background: radial-gradient(ellipse, rgb(0 0 0 / .6), transparent 70%);
+  z-index: -1;
+}
+.fire { position: relative; width: 12px; height: 26px; margin-bottom: -3px; transform: scale(var(--fs, 1)); transform-origin: 50% 100%; }
+.fire::before { /* warm glow, stronger the darker the room */
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 150px; height: 150px;
+  margin: -75px 0 0 -75px;
+  background: radial-gradient(circle, rgb(255 170 70 / calc(.28 + (1 - var(--light)) * .42)) 0%, rgb(255 140 40 / calc(.08 + (1 - var(--light)) * .12)) 40%, transparent 70%);
+  mix-blend-mode: screen;
+  animation: glow var(--speed, 1.4s) ease-in-out var(--delay, 0s) infinite alternate;
+}
+.flame {
+  position: absolute;
+  inset: 0;
+  border-radius: 50% 50% 50% 50% / 80% 80% 20% 20%;
+  background: radial-gradient(ellipse at 50% 78%, #fffbe0 0 22%, #ffd45a 50%, #ff8a1f 80%, rgb(255 90 10 / 0) 100%);
+  transform-origin: 50% 100%;
+  animation: flicker var(--speed, 1.4s) ease-in-out var(--delay, 0s) infinite alternate;
+  filter: drop-shadow(0 0 5px rgb(255 160 50 / .9));
+}
+.wick { width: 2px; height: 7px; background: #2a2018; margin-bottom: -1px; }
+.wax {
+  position: relative;
+  width: var(--w, 16px);
+  height: var(--h, 36px);
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(90deg, #cdbf9f, #f6edd8 45%, #c9bb9a);
+  box-shadow: inset 0 3px 0 rgb(255 255 255 / .35);
+}
+.wax::before { /* a drip */
+  content: '';
+  position: absolute;
+  left: 3px; top: 0;
+  width: 4px; height: 40%;
+  border-radius: 0 0 3px 3px;
+  background: rgb(255 255 255 / .45);
+}
+.dish {
+  width: calc(var(--w, 16px) + 28px); height: 9px;
+  border-radius: 50% 50% 8px 8px / 100% 100% 40% 40%;
+  background: linear-gradient(#e6c673, #8a6a2c);
+  box-shadow: 0 2px 4px rgba(0,0,0,.6);
+}
+.candle.pillar .wax { border-radius: 4px 4px 2px 2px; background: linear-gradient(90deg, #d8c3a2, #f3e6cc 40%, #c2ad8a); }
+.candle.pillar .dish { background: linear-gradient(#c9ccd1, #6f7378); }
+.candle.tealight .wick { height: 4px; }
+.candle.tealight .wax { height: 5px; width: 22px; border-radius: 2px 2px 0 0; }
+.candle.tealight .dish { width: 30px; height: 10px; border-radius: 3px 3px 5px 5px / 3px 3px 8px 8px; background: linear-gradient(90deg, #8d9196, #e4e6e9 45%, #7b7f84); }
+@keyframes flicker {
+  0%   { transform: scale(1, 1) rotate(-2deg); }
+  20%  { transform: scale(.92, 1.08) rotate(1.5deg); }
+  45%  { transform: scale(1.05, .94) rotate(-1deg); }
+  70%  { transform: scale(.95, 1.1) rotate(2deg); }
+  100% { transform: scale(1, .97) rotate(-1.5deg); }
+}
+@keyframes glow { from { transform: scale(.94); } to { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .flame, .fire::before { animation: none; } }

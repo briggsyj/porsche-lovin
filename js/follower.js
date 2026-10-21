@@ -2,6 +2,7 @@ import { CONFIG } from './config.js';
 
 // The person image that tracks the pointer, lips on the cursor.
 export function createFollower({ el, personImg }) {
+  const body = el.querySelector('.body');
   const img = el.querySelector('img.main');
   const strips = el.querySelector('.strips');
   img.src = personImg.src;
@@ -15,7 +16,8 @@ export function createFollower({ el, personImg }) {
     img.style.width = `${w}px`;
     ax = w * CONFIG.person.anchor.x;
     ay = h * CONFIG.person.anchor.y;
-    el.style.transformOrigin = `${ax}px ${ay}px`; // scale about the lips so they stay on the cursor
+    el.style.transformOrigin = `${ax}px ${ay}px`; // scale and flip about the lips so they stay on the cursor
+    body.style.transformOrigin = `${ax}px ${ay}px`;
     buildStrips(w, h);
     paint();
   }
@@ -78,6 +80,7 @@ export function createFollower({ el, personImg }) {
       scaleTarget = Math.min(1, Math.max(min, Math.pow(depth / nearDepth, strength)));
       if (!raf) raf = requestAnimationFrame(paint);
     },
+    setFlipped(flipped) { body.classList.toggle('flipped', flipped); },
     show() { clearTimeout(hideTimer); el.classList.add('on'); },
     hide(delay = 0) { clearTimeout(hideTimer); hideTimer = setTimeout(() => el.classList.remove('on'), delay); },
     pulse() { el.classList.add('kiss'); setTimeout(() => el.classList.remove('kiss'), 140); },

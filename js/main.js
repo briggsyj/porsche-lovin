@@ -6,6 +6,8 @@ import { createStage } from './stage.js';
 import { createFollower } from './follower.js';
 import { createAudio } from './audio.js';
 import { runIntro } from './intro.js';
+import { createSpotlight } from './spotlight.js';
+import { createCandles } from './candles.js';
 import { createDebug } from './debug.js';
 
 const params = new URLSearchParams(location.search);
@@ -29,9 +31,10 @@ async function loadAssets() {
 }
 
 async function boot() {
+  createCandles(document.querySelector('.candles'));
   const audio = createAudio();
   const modal = document.getElementById('modal');
-  let stage, follower, surface;
+  let stage, follower, surface, spotlight;
 
   // Build the stage as soon as assets are ready so the car is visible behind the modal.
   const ready = loadAssets().then((a) => {
@@ -43,7 +46,9 @@ async function boot() {
       kissImg: a.kiss,
       surface,
       onKiss() { audio.playKiss(); follower.pulse(); },
+      onFit() { if (spotlight) spotlight.layout(); },
     });
+    spotlight = createSpotlight({ el: document.querySelector('.spot'), canvas: document.getElementById('stage'), maskAlphaCanvas: surface.maskAlphaCanvas });
     if (params.get('debug') === '1') createDebug({ stage, surface });
   });
 
@@ -59,9 +64,23 @@ async function boot() {
   stage.enable();
   document.body.classList.add('play');
 
+  // The person faces the way the surface under the cursor faces. The normal map is averaged over a wide
+  // area, smoothed over time, and given a dead zone and dwell time, so tiny details don't make them flip-flop.
+  let flipped = false, facing = 0, lastFlip = 0, lastSample = performance.now();
   const track = (e) => {
     const uv = stage.uvAt(e.clientX, e.clientY);
-    if (uv) follower.setDepth(surface.surfaceAt(uv.u, uv.v).depth, surface.nearDepth); // off the image, keep the last size
+    if (uv) {
+      follower.setDepth(surface.surfaceAt(uv.u, uv.v).depth, surface.nearDepth);
+      const { radiusFrac, smoothMs, threshold, dwellMs } = CONFIG.person.facing;
+      const now = performance.now();
+      facing += (surface.facingAt(uv.u, uv.v, radiusFrac) - facing) * (1 - Math.exp(-(now - lastSample) / smoothMs));
+      lastSample = now;
+      if (now - lastFlip > dwellMs && ((!flipped && facing > threshold) || (flipped && facing < -threshold))) {
+        flipped = !flipped;
+        lastFlip = now;
+        follower.setFlipped(flipped);
+      }
+    } else lastSample = performance.now(); // off the image: keep the last size and facing
     follower.move(e.clientX, e.clientY);
     follower.show();
   };

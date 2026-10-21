@@ -1,21 +1,25 @@
 import { CONFIG } from './config.js';
 
-// Paints a kiss "onto" the surface rather than flat on the screen.
+// Paints a kiss onto the surface as a projected decal.
 //
-// The kiss is a grid mesh. Each vertex starts at the kiss centre and walks across the surface
-// by its decal-space offset; at every step the local normal gives the surface's two tangent
-// directions, and the step is the offset expressed in those tangents, projected back to the
-// screen. So the kiss compresses where the surface turns away, and bends as the normal changes
-// across it. On a flat tilted panel this is exactly the foreshortening you'd get photographing
-// a sticker on it.
+// 1. Around the kiss, turn the normal map into a small height field (integrate the slopes the
+//    normals describe), so every screen pixel there has a 3D position on the surface.
+// 2. The kiss lives on a plane at the kiss's footprint normal. Each surface point is projected
+//    onto that plane (straight along the normal, like a decal projector) to find which texel of
+//    the kiss lands on it.
+// 3. Rasterise: every screen pixel gets the texel of whatever surface point is there. Where the
+//    surface turns away or steps (panel edges, grille, lamp rims) the kiss compresses, stretches
+//    and breaks exactly as paint on that geometry would; where it turns edge-on it fades out.
 //
-// The mesh is rasterised on the CPU into a small supersampled scratch image (no triangle seams,
-// and kisses are only tens of pixels wide), then composited onto the stage.
+// The result is drawn into a small supersampled scratch image, clipped to the mask, lit by the
+// paint underneath, and composited onto the stage.
 export function createDecal({ kissImg, carImg, surface }) {
-  const { cols: COLS, rows: ROWS, steps: STEPS, supersample: SS } = CONFIG.warp;
+  const { supersample: SS, reach, fade, planeLimit } = CONFIG.warp;
   const tw = kissImg.naturalWidth, th = kissImg.naturalHeight;
   const aspect = th / tw;
+  const mw = surface.width, mh = surface.height;
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 
   // Premultiplied float copy of the kiss so bilinear sampling doesn't fringe at the edges.
   const tex = new Float32Array(tw * th * 4);
@@ -48,41 +52,10 @@ export function createDecal({ kissImg, carImg, surface }) {
   const hi = scratch(), lo = scratch(), lit = scratch();
   const ensure = (s, w, h) => { if (s.c.width < w) s.c.width = w; if (s.c.height < h) s.c.height = h; };
 
-  // Screen-space vertex positions (CSS px) for one kiss.
-  function buildMesh(k, cssW, cssH) {
-    const W = CONFIG.kiss.widthFrac * cssW * k.scale, H = W * aspect;
-    const cs = Math.cos(k.spin), sn = Math.sin(k.spin);
-    const pts = new Float32Array((COLS + 1) * (ROWS + 1) * 2);
-    for (let j = 0; j <= ROWS; j++) {
-      for (let i = 0; i <= COLS; i++) {
-        const a0 = (i / COLS - 0.5) * W, b0 = (j / ROWS - 0.5) * H;
-        const a = (a0 * cs - b0 * sn) / STEPS, b = (a0 * sn + b0 * cs) / STEPS; // spin within the surface plane
-        let x = k.u * cssW, y = k.v * cssH;
-        for (let s = 0; s < STEPS; s++) {
-          // The kiss's robust footprint normal; optionally eased toward the fine local normal.
-          const c = CONFIG.warp.curvature;
-          let n = k.normal;
-          if (c > 0) {
-            const q = surface.normalAt(x / cssW, y / cssH);
-            const mx = n.x * (1 - c) + q.x * c, my = n.y * (1 - c) + q.y * c, mz = n.z * (1 - c) + q.z * c;
-            const m = Math.hypot(mx, my, mz) || 1;
-            n = { x: mx / m, y: my / m, z: mz / m };
-          }
-          // Tangent basis: e1 = screen-x projected onto the surface plane, e2 = n x e1.
-          const l = Math.hypot(1 - n.x * n.x, n.x * n.y, n.x * n.z) || 1;
-          const e1x = (1 - n.x * n.x) / l, e1y = (-n.x * n.y) / l, e1z = (-n.x * n.z) / l;
-          const e2x = n.y * e1z - n.z * e1y, e2y = n.z * e1x - n.x * e1z;
-          x += a * e1x + b * e2x;
-          y += a * e1y + b * e2y;
-        }
-        const p = (j * (COLS + 1) + i) * 2;
-        pts[p] = x; pts[p + 1] = y;
-      }
-    }
-    return pts;
-  }
-
-  function rasterTri(out, sw, sh, x0, y0, u0, v0, x1, y1, u1, v1, x2, y2, u2, v2) {
+  // Rasterise one triangle of the grid; texture coords and fade are interpolated across it.
+  function tri(out, sw, sh, S, ia, ib, ic) {
+    const { X, Y, U, V, F } = S;
+    const x0 = X[ia], y0 = Y[ia], x1 = X[ib], y1 = Y[ib], x2 = X[ic], y2 = Y[ic];
     const den = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
     if (Math.abs(den) < 1e-9) return;
     const minx = Math.max(0, Math.floor(Math.min(x0, x1, x2))), maxx = Math.min(sw - 1, Math.ceil(Math.max(x0, x1, x2)));
@@ -95,35 +68,88 @@ export function createDecal({ kissImg, carImg, surface }) {
         const l1 = ((y2 - y0) * (cx - x2) + (x0 - x2) * (cy - y2)) / den;
         const l2 = 1 - l0 - l1;
         if (l0 < -E || l1 < -E || l2 < -E) continue;
-        sample(l0 * u0 + l1 * u1 + l2 * u2, l0 * v0 + l1 * v1 + l2 * v2);
+        const u = l0 * U[ia] + l1 * U[ib] + l2 * U[ic], v = l0 * V[ia] + l1 * V[ib] + l2 * V[ic];
+        if (u < 0 || v < 0 || u >= tw || v >= th) continue; // outside the kiss
+        const f = l0 * F[ia] + l1 * F[ib] + l2 * F[ic];
+        if (f <= 0) continue;
+        sample(u, v);
         const a = px[3];
         const o = (py * sw + pxl) * 4;
         if (a <= 0) { out[o + 3] = 0; continue; }
-        out[o] = (px[0] / a) * 255; out[o + 1] = (px[1] / a) * 255; out[o + 2] = (px[2] / a) * 255; out[o + 3] = a * 255;
+        out[o] = (px[0] / a) * 255; out[o + 1] = (px[1] / a) * 255; out[o + 2] = (px[2] / a) * 255; out[o + 3] = a * f * 255;
       }
     }
   }
 
   // ctx must already have its transform set to (dpr, 0, 0, dpr, 0, 0), i.e. draw in CSS px.
-  function draw(ctx, k, cssW, cssH, dpr, wire = false) {
-    const pts = buildMesh(k, cssW, cssH);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let i = 0; i < pts.length; i += 2) {
-      minX = Math.min(minX, pts[i]); maxX = Math.max(maxX, pts[i]);
-      minY = Math.min(minY, pts[i + 1]); maxY = Math.max(maxY, pts[i + 1]);
+  function draw(ctx, k, cssW, cssH, dpr) {
+    const toCssX = cssW / (mw - 1), toCssY = cssH / (mh - 1); // map px -> CSS px
+    const cxm = k.u * (mw - 1), cym = k.v * (mh - 1);
+    const W = CONFIG.kiss.widthFrac * k.scale * mw, H = W * aspect; // kiss size in map px
+    const R = Math.ceil(0.5 * Math.hypot(W, H) * reach) + 2;        // patch half-size, with room to stretch
+    const ci = Math.round(cxm), cj = Math.round(cym), N = 2 * R + 1;
+
+    // Surface slopes and normals over the patch.
+    const gx = new Float32Array(N * N), gy = new Float32Array(N * N);
+    const nx = new Float32Array(N * N), ny = new Float32Array(N * N), nz = new Float32Array(N * N);
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const n = surface.normalAt((ci - R + i) / (mw - 1), (cj - R + j) / (mh - 1));
+        const q = j * N + i;
+        nx[q] = n.x; ny[q] = n.y; nz[q] = n.z;
+        gx[q] = -n.x / n.z; gy[q] = -n.y / n.z; // n ~ (-dz/dx, -dz/dy, 1), z toward the camera
+      }
     }
-    minX -= 1; minY -= 1; maxX += 1; maxY += 1;
+    // Integrate to heights: down/up the centre column, then out along each row.
+    const z = new Float32Array(N * N);
+    for (let j = R + 1; j < N; j++) z[j * N + R] = z[(j - 1) * N + R] + 0.5 * (gy[(j - 1) * N + R] + gy[j * N + R]);
+    for (let j = R - 1; j >= 0; j--) z[j * N + R] = z[(j + 1) * N + R] - 0.5 * (gy[(j + 1) * N + R] + gy[j * N + R]);
+    for (let j = 0; j < N; j++) {
+      const row = j * N;
+      for (let i = R + 1; i < N; i++) z[row + i] = z[row + i - 1] + 0.5 * (gx[row + i - 1] + gx[row + i]);
+      for (let i = R - 1; i >= 0; i--) z[row + i] = z[row + i + 1] - 0.5 * (gx[row + i + 1] + gx[row + i]);
+    }
+
+    // The decal's plane: normal n0 (the kiss's footprint normal), tangents t1/t2, spun in-plane.
+    const n0 = k.normal;
+    const l = Math.hypot(1 - n0.x * n0.x, n0.x * n0.y, n0.x * n0.z) || 1;
+    const e1 = [(1 - n0.x * n0.x) / l, (-n0.x * n0.y) / l, (-n0.x * n0.z) / l];
+    const e2 = [n0.y * e1[2] - n0.z * e1[1], n0.z * e1[0] - n0.x * e1[2], n0.x * e1[1] - n0.y * e1[0]];
+    const cs = Math.cos(k.spin), sn = Math.sin(k.spin);
+    const t1 = [cs * e1[0] + sn * e2[0], cs * e1[1] + sn * e2[1], cs * e1[2] + sn * e2[2]];
+    const t2 = [-sn * e1[0] + cs * e2[0], -sn * e1[1] + cs * e2[1], -sn * e1[2] + cs * e2[2]];
+    const wide = Math.max(W, H);
+
+    // Sprite covers the patch.
+    const minX = (ci - R) * toCssX, maxX = (ci + R) * toCssX, minY = (cj - R) * toCssY, maxY = (cj + R) * toCssY;
     const pw = Math.max(1, Math.ceil((maxX - minX) * dpr)), ph = Math.max(1, Math.ceil((maxY - minY) * dpr));
     const sw = pw * SS, sh = ph * SS, f = dpr * SS;
 
+    const S = { X: new Float32Array(N * N), Y: new Float32Array(N * N), U: new Float32Array(N * N), V: new Float32Array(N * N), F: new Float32Array(N * N) };
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const q = j * N + i;
+        const Px = ci - R + i - cxm, Py = cj - R + j - cym, Pz = z[q];
+        S.X[q] = ((ci - R + i) * toCssX - minX) * f;
+        S.Y[q] = ((cj - R + j) * toCssY - minY) * f;
+        S.U[q] = ((Px * t1[0] + Py * t1[1] + Pz * t1[2]) / W + 0.5) * tw; // where on the kiss this surface point falls
+        S.V[q] = ((Px * t2[0] + Py * t2[1] + Pz * t2[2]) / H + 0.5) * th;
+        const facing = nx[q] * n0.x + ny[q] * n0.y + nz[q] * n0.z;        // surface turning away from the decal plane
+        const off = Math.abs(Px * n0.x + Py * n0.y + Pz * n0.z) / wide;   // surface far from the decal plane (a different layer)
+        S.F[q] = smooth(fade[0], fade[1], facing) * (1 - smooth(planeLimit * 0.6, planeLimit, off));
+      }
+    }
+
     const img = hi.g.createImageData(sw, sh);
-    const V = (i, j) => { const p = (j * (COLS + 1) + i) * 2; return [(pts[p] - minX) * f, (pts[p + 1] - minY) * f]; };
-    for (let j = 0; j < ROWS; j++) {
-      for (let i = 0; i < COLS; i++) {
-        const [ax, ay] = V(i, j), [bx, by] = V(i + 1, j), [cx, cy] = V(i, j + 1), [dx, dy] = V(i + 1, j + 1);
-        const u0 = (i / COLS) * tw, u1 = ((i + 1) / COLS) * tw, v0 = (j / ROWS) * th, v1 = ((j + 1) / ROWS) * th;
-        rasterTri(img.data, sw, sh, ax, ay, u0, v0, bx, by, u1, v0, cx, cy, u0, v1);
-        rasterTri(img.data, sw, sh, bx, by, u1, v0, dx, dy, u1, v1, cx, cy, u0, v1);
+    for (let j = 0; j < N - 1; j++) {
+      for (let i = 0; i < N - 1; i++) {
+        const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
+        const U = S.U, V = S.V, F = S.F;
+        if ((U[a] < 0 && U[b] < 0 && U[c] < 0 && U[d] < 0) || (U[a] >= tw && U[b] >= tw && U[c] >= tw && U[d] >= tw)) continue;
+        if ((V[a] < 0 && V[b] < 0 && V[c] < 0 && V[d] < 0) || (V[a] >= th && V[b] >= th && V[c] >= th && V[d] >= th)) continue;
+        if (F[a] <= 0 && F[b] <= 0 && F[c] <= 0 && F[d] <= 0) continue;
+        tri(img.data, sw, sh, S, a, b, c);
+        tri(img.data, sw, sh, S, b, d, c);
       }
     }
     ensure(hi, sw, sh); ensure(lo, pw, ph); ensure(lit, pw, ph);
@@ -143,8 +169,10 @@ export function createDecal({ kissImg, carImg, surface }) {
     }
     ctx.drawImage(lo.c, 0, 0, pw, ph, minX, minY, dw, dh);
 
-    // Let the paint's light and reflections show through: the car under the kiss, soft-light blended.
-    if (CONFIG.kiss.blend > 0) {
+    // Make the kiss take on the paint's lighting: the car under the kiss is multiplied in (so kisses in
+    // shade sit darker, like lipstick on paint, not a bright sticker) and soft-light blended (so
+    // highlights and reflections show through).
+    if (CONFIG.kiss.blend > 0 || CONFIG.kiss.multiply > 0) {
       lit.g.globalCompositeOperation = 'source-over';
       lit.g.clearRect(0, 0, pw, ph);
       lit.g.drawImage(carImg, (minX / cssW) * carImg.naturalWidth, (minY / cssH) * carImg.naturalHeight,
@@ -152,20 +180,26 @@ export function createDecal({ kissImg, carImg, surface }) {
       lit.g.globalCompositeOperation = 'destination-in';
       lit.g.drawImage(lo.c, 0, 0, pw, ph, 0, 0, pw, ph);
       ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = CONFIG.kiss.multiply;
+      ctx.drawImage(lit.c, 0, 0, pw, ph, minX, minY, dw, dh);
       ctx.globalCompositeOperation = 'soft-light';
       ctx.globalAlpha = CONFIG.kiss.blend;
       ctx.drawImage(lit.c, 0, 0, pw, ph, minX, minY, dw, dh);
       ctx.restore();
     }
 
-    if (wire) {
+    // Ambient occlusion from the depth map: kisses sitting in creases and recesses darken very slightly.
+    if (CONFIG.kiss.ao > 0 && surface.aoCanvas) {
+      const a = surface.aoCanvas;
+      lit.g.globalCompositeOperation = 'source-over';
+      lit.g.clearRect(0, 0, pw, ph);
+      lit.g.drawImage(a, (minX / cssW) * a.width, (minY / cssH) * a.height, (dw / cssW) * a.width, (dh / cssH) * a.height, 0, 0, pw, ph);
+      lit.g.globalCompositeOperation = 'destination-in';
+      lit.g.drawImage(lo.c, 0, 0, pw, ph, 0, 0, pw, ph);
       ctx.save();
-      ctx.strokeStyle = 'rgb(0 255 120 / .9)';
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      for (let j = 0; j <= ROWS; j++) for (let i = 0; i <= COLS; i++) { const p = (j * (COLS + 1) + i) * 2; if (i === 0) ctx.moveTo(pts[p], pts[p + 1]); else ctx.lineTo(pts[p], pts[p + 1]); }
-      for (let i = 0; i <= COLS; i++) for (let j = 0; j <= ROWS; j++) { const p = (j * (COLS + 1) + i) * 2; if (j === 0) ctx.moveTo(pts[p], pts[p + 1]); else ctx.lineTo(pts[p], pts[p + 1]); }
-      ctx.stroke();
+      ctx.globalAlpha = CONFIG.kiss.ao;
+      ctx.drawImage(lit.c, 0, 0, pw, ph, minX, minY, dw, dh);
       ctx.restore();
     }
   }

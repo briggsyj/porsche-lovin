@@ -12,27 +12,27 @@ function readPixels(img, w, h) {
   return { canvas, data: ctx.getImageData(0, 0, w, h).data };
 }
 
-// Separable box blur over a 3-channel float field (edge-clamped, running sums).
-function boxBlur(src, w, h, r) {
+// Separable box blur over an interleaved float field (edge-clamped, running sums).
+function boxBlur(src, w, h, r, ch = 3) {
   const n = 2 * r + 1;
   const tmp = new Float32Array(src.length), out = new Float32Array(src.length);
   for (let y = 0; y < h; y++) {
-    for (let c = 0; c < 3; c++) {
+    for (let c = 0; c < ch; c++) {
       let s = 0;
-      for (let k = -r; k <= r; k++) s += src[(y * w + clamp(k, 0, w - 1)) * 3 + c];
+      for (let k = -r; k <= r; k++) s += src[(y * w + clamp(k, 0, w - 1)) * ch + c];
       for (let x = 0; x < w; x++) {
-        tmp[(y * w + x) * 3 + c] = s / n;
-        s += src[(y * w + clamp(x + r + 1, 0, w - 1)) * 3 + c] - src[(y * w + clamp(x - r, 0, w - 1)) * 3 + c];
+        tmp[(y * w + x) * ch + c] = s / n;
+        s += src[(y * w + clamp(x + r + 1, 0, w - 1)) * ch + c] - src[(y * w + clamp(x - r, 0, w - 1)) * ch + c];
       }
     }
   }
   for (let x = 0; x < w; x++) {
-    for (let c = 0; c < 3; c++) {
+    for (let c = 0; c < ch; c++) {
       let s = 0;
-      for (let k = -r; k <= r; k++) s += tmp[(clamp(k, 0, h - 1) * w + x) * 3 + c];
+      for (let k = -r; k <= r; k++) s += tmp[(clamp(k, 0, h - 1) * w + x) * ch + c];
       for (let y = 0; y < h; y++) {
-        out[(y * w + x) * 3 + c] = s / n;
-        s += tmp[(clamp(y + r + 1, 0, h - 1) * w + x) * 3 + c] - tmp[(clamp(y - r, 0, h - 1) * w + x) * 3 + c];
+        out[(y * w + x) * ch + c] = s / n;
+        s += tmp[(clamp(y + r + 1, 0, h - 1) * w + x) * ch + c] - tmp[(clamp(y - r, 0, h - 1) * w + x) * ch + c];
       }
     }
   }
@@ -68,6 +68,28 @@ export function createSurface(carImg, depthImg, normalImg, maskImg = null) {
   let nearBin = 0;
   for (acc = 0; nearBin < 255; nearBin++) { acc += hist[nearBin]; if (acc >= 0.98 * w * h) break; }
   const nearDepth = Math.max(nearBin / 255, 0.02);
+
+  // Basic ambient occlusion from the depth map: a point sitting further back than its surroundings
+  // (a crease, a recess, the foot of a panel) is shaded. Two scales: tight creases and broader recesses.
+  // Stored as black with the occlusion in alpha; kisses are darkened by it, lightly, where they sit.
+  const aoCanvas = document.createElement('canvas');
+  aoCanvas.width = w;
+  aoCanvas.height = h;
+  {
+    const d = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) d[i] = depthAt(i * 4);
+    const { smallFrac, largeFrac, gain } = CONFIG.ao;
+    const flat = boxBlur(d, w, h, Math.max(1, Math.round(w * CONFIG.ao.noiseFrac)), 1); // the depth map's fine speckle isn't geometry
+    const small = boxBlur(d, w, h, Math.max(1, Math.round(w * smallFrac)), 1);
+    const large = boxBlur(d, w, h, Math.max(1, Math.round(w * largeFrac)), 1);
+    const g = aoCanvas.getContext('2d');
+    const img = g.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+      const occ = Math.max(0, small[i] - flat[i]) * gain[0] + Math.max(0, large[i] - flat[i]) * gain[1];
+      img.data[i * 4 + 3] = clamp(occ, 0, 1) * 255;
+    }
+    g.putImageData(img, 0, 0);
+  }
 
   // Mask as an alpha channel (white = opaque, black = clear, edge steepened a little so it stays crisp),
   // used to clip kisses at the edge of the allowed area.
@@ -145,6 +167,21 @@ export function createSurface(carImg, depthImg, normalImg, maskImg = null) {
     return { x: nx / len2, y: ny / len2, z: nz / len2, kept: kept.length, total: samples };
   }
 
+  // Which way the surface around (u, v) faces sideways: the mean x of the unit normals over a disc of
+  // radius radiusFrac (fraction of image width). +1 = facing right, -1 = facing left, ~0 = flat on / mixed.
+  // Averaging over a wide disc keeps tiny details from swinging it.
+  function facingAt(u, v, radiusFrac) {
+    let sum = 0, count = 0;
+    for (let j = -3; j <= 3; j++) {
+      for (let i = -3; i <= 3; i++) {
+        if (i * i + j * j > 9.5) continue;
+        sum += normalAt(u + (i / 3) * radiusFrac, v + (j / 3) * radiusFrac * (w / h)).x;
+        count++;
+      }
+    }
+    return sum / count;
+  }
+
   function surfaceAt(u, v) {
     const cx = clamp(Math.round(u * (w - 1)), 0, w - 1);
     const cy = clamp(Math.round(v * (h - 1)), 0, h - 1);
@@ -174,5 +211,5 @@ export function createSurface(carImg, depthImg, normalImg, maskImg = null) {
     };
   }
 
-  return { surfaceAt, normalAt, footprintNormal, depthCanvas: depth.canvas, normalCanvas: normal.canvas, maskCanvas: mask && mask.canvas, maskAlphaCanvas: maskAlpha, median, nearDepth };
+  return { width: w, height: h, surfaceAt, normalAt, footprintNormal, facingAt, depthCanvas: depth.canvas, normalCanvas: normal.canvas, maskCanvas: mask && mask.canvas, maskAlphaCanvas: maskAlpha, aoCanvas, median, nearDepth };
 }
