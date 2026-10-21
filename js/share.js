@@ -81,50 +81,50 @@ const pageUrl = () => `${location.origin}${location.pathname}?pw=g`;
 
 export function createShare({ getCount }) {
   const root = document.getElementById('share');
-  const button = root.querySelector('.share-btn');
-  const panel = root.querySelector('.share-panel');
   const status = root.querySelector('.share-status');
   const els = { n: root.querySelector('#share-n'), unit: root.querySelector('#share-unit'), rank: root.querySelector('#share-rank'), compliment: root.querySelector('#share-compliment') };
-  let timer = 0, statusTimer = 0;
+  let statusTimer = 0, shown = -1;
 
+  // The panel is always visible, so the count follows the kisses as they're placed.
   function render() {
-    const count = getCount(), r = rankFor(count);
+    const count = getCount();
+    if (count === shown) return;
+    shown = count;
+    const r = rankFor(count);
     els.n.textContent = String(count);
     els.unit.textContent = count === 1 ? 'time' : 'times';
     els.rank.textContent = r.title;
     els.compliment.textContent = r.compliment;
   }
 
-  function setOpen(open) {
-    panel.hidden = !open;
-    button.setAttribute('aria-expanded', String(open));
-    clearInterval(timer);
-    if (open) { render(); timer = setInterval(render, 400); }
-  }
-
-  async function copy() {
+  // "Copy & share": always copies the text; where the browser has a share sheet (phones, some desktops) it opens that too.
+  async function copyAndShare() {
     const text = shareText(getCount(), pageUrl());
-    let ok = false;
-    try { await navigator.clipboard.writeText(text); ok = true; } catch {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { ok = document.execCommand('copy'); } catch { ok = false; }
-      ta.remove();
-    }
-    status.textContent = ok ? 'Copied to your clipboard. Go paste it somewhere!' : 'Could not copy. Select and copy it manually.';
+    const copied = copyText(text); // started right away so the click's permission covers both calls
+    if (navigator.share) navigator.share({ text }).catch(() => {}); // dismissing the sheet is not an error
+    const ok = await copied;
+    status.textContent = ok ? 'Copied! Go paste it somewhere.' : 'Could not copy. Select and copy it manually.';
     clearTimeout(statusTimer);
     statusTimer = setTimeout(() => (status.textContent = ''), 2500);
   }
 
-  // Clicking Share copies the text and shows the popup; the popup closes on a click anywhere else, or Escape.
-  button.addEventListener('click', () => { setOpen(true); copy(); });
-  root.querySelector('.share-copy').addEventListener('click', copy);
-  // Interacting with the share box shouldn't move or pulse the cursor-following person or reach the canvas.
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through to the older way */ }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  root.querySelector('.share-copy').addEventListener('click', copyAndShare);
+  // Touching the panel shouldn't move or pulse the cursor-following person.
   root.addEventListener('pointerdown', (e) => e.stopPropagation());
-  document.addEventListener('pointerdown', (e) => { if (!panel.hidden && !root.contains(e.target)) setOpen(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { setOpen(false); button.focus(); } });
+  render();
+  setInterval(render, 200);
   return { shareText: () => shareText(getCount(), pageUrl()) };
 }
