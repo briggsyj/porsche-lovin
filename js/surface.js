@@ -71,24 +71,15 @@ export function createSurface(carImg, depthImg, normalImg, maskImg = null) {
 
   // Basic ambient occlusion from the depth map: a point sitting further back than its surroundings
   // (a crease, a recess, the foot of a panel) is shaded. Two scales: tight creases and broader recesses.
-  // Stored as black with the occlusion in alpha; kisses are darkened by it, lightly, where they sit.
-  const aoCanvas = document.createElement('canvas');
-  aoCanvas.width = w;
-  aoCanvas.height = h;
+  const depthFineOcc = new Float32Array(w * h), depthBroadOcc = new Float32Array(w * h);
   {
     const d = new Float32Array(w * h);
     for (let i = 0; i < w * h; i++) d[i] = depthAt(i * 4);
-    const { smallFrac, largeFrac, gain } = CONFIG.ao;
+    const { smallFrac, largeFrac } = CONFIG.ao;
     const flat = boxBlur(d, w, h, Math.max(1, Math.round(w * CONFIG.ao.noiseFrac)), 1); // the depth map's fine speckle isn't geometry
     const small = boxBlur(d, w, h, Math.max(1, Math.round(w * smallFrac)), 1);
     const large = boxBlur(d, w, h, Math.max(1, Math.round(w * largeFrac)), 1);
-    const g = aoCanvas.getContext('2d');
-    const img = g.createImageData(w, h);
-    for (let i = 0; i < w * h; i++) {
-      const occ = Math.max(0, small[i] - flat[i]) * gain[0] + Math.max(0, large[i] - flat[i]) * gain[1];
-      img.data[i * 4 + 3] = clamp(occ, 0, 1) * 255;
-    }
-    g.putImageData(img, 0, 0);
+    for (let i = 0; i < w * h; i++) { depthFineOcc[i] = Math.max(0, small[i] - flat[i]); depthBroadOcc[i] = Math.max(0, large[i] - flat[i]); }
   }
 
   // Mask as an alpha channel (white = opaque, black = clear, edge steepened a little so it stays crisp),
@@ -113,6 +104,52 @@ export function createSurface(carImg, depthImg, normalImg, maskImg = null) {
     decoded[i * 3 + 2] = normal.data[i * 4 + 2] / 127.5 - 1;
   }
   const field = boxBlur(decoded, w, h, Math.max(1, Math.round(w * CONFIG.warp.smoothFrac)));
+
+  // Finer occlusion from the normal map, which holds more detail than the depth map. Read the normals as
+  // surface slopes; where the slopes converge (positive divergence) the surface is concave: a crease, a
+  // panel gap, the inside of a vent. Measured at a fine and a medium scale, added to the depth occlusion.
+  // Stored as black with the occlusion in alpha; kisses are darkened by it, lightly, where they sit.
+  const aoCanvas = document.createElement('canvas');
+  aoCanvas.width = w;
+  aoCanvas.height = h;
+  const normalFineOcc = new Float32Array(w * h), normalMediumOcc = new Float32Array(w * h);
+  {
+    const detail = boxBlur(decoded, w, h, 1);
+    const sx = new Float32Array(w * h), sy = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const len = Math.hypot(detail[i * 3], detail[i * 3 + 1], detail[i * 3 + 2]) || 1;
+      const z = Math.max(detail[i * 3 + 2] / len, CONFIG.normal.minForeshorten);
+      sx[i] = clamp(-(detail[i * 3] / len) / z, -3, 3);
+      sy[i] = clamp(-(detail[i * 3 + 1] / len) / z, -3, 3);
+    }
+    const divergence = (step) => {
+      const out = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const xa = Math.min(w - 1, x + step), xb = Math.max(0, x - step), ya = Math.min(h - 1, y + step), yb = Math.max(0, y - step);
+          out[y * w + x] = (sx[y * w + xa] - sx[y * w + xb]) / (xa - xb || 1) + (sy[ya * w + x] - sy[yb * w + x]) / (ya - yb || 1);
+        }
+      }
+      return out;
+    };
+    const { steps } = CONFIG.ao.normal;
+    const fine = divergence(steps[0]), medium = divergence(steps[1]);
+    for (let i = 0; i < w * h; i++) { normalFineOcc[i] = Math.max(0, fine[i]); normalMediumOcc[i] = Math.max(0, medium[i]); }
+  }
+
+  // Combine the four occlusion layers with the current gains into the AO canvas. Called once now, and
+  // again by the debug tuner whenever a gain changes.
+  function updateAO() {
+    const { gain, normal } = CONFIG.ao;
+    const g = aoCanvas.getContext('2d');
+    const img = g.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+      const occ = depthFineOcc[i] * gain[0] + depthBroadOcc[i] * gain[1] + normalFineOcc[i] * normal.gain[0] + normalMediumOcc[i] * normal.gain[1];
+      img.data[i * 4 + 3] = clamp(occ, 0, 1) * 255;
+    }
+    g.putImageData(img, 0, 0);
+  }
+  updateAO();
 
   // Unit surface normal at (u, v), bilinearly interpolated. nz is floored so grazing
   // surfaces never collapse a kiss to nothing.
@@ -211,5 +248,5 @@ export function createSurface(carImg, depthImg, normalImg, maskImg = null) {
     };
   }
 
-  return { width: w, height: h, surfaceAt, normalAt, footprintNormal, facingAt, depthCanvas: depth.canvas, normalCanvas: normal.canvas, maskCanvas: mask && mask.canvas, maskAlphaCanvas: maskAlpha, aoCanvas, median, nearDepth };
+  return { width: w, height: h, updateAO, surfaceAt, normalAt, footprintNormal, facingAt, depthCanvas: depth.canvas, normalCanvas: normal.canvas, maskCanvas: mask && mask.canvas, maskAlphaCanvas: maskAlpha, aoCanvas, median, nearDepth };
 }

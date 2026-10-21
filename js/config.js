@@ -20,9 +20,9 @@ export const CONFIG = {
   kiss: {
     widthFrac: 0.025,     // base kiss width as a fraction of the image width
     spinMaxDeg: 40,       // random in-surface rotation, +/- this
-    ao: 0.6,              // 0-1: how strongly depth-based occlusion shading darkens a kiss in creases and recesses
-    multiply: 0.5,        // 0-1: how much the car's own light/shade is multiplied into the kiss, so it sits in the paint rather than on top of it
-    blend: 0.55,          // 0-1: how much of the car's light/reflections shows through the kiss (0 = flat sticker)
+    ao: 0.77,              // 0-1: how strongly depth-based occlusion shading darkens a kiss in creases and recesses
+    multiply: 0.4,        // 0-1: how much the car's own light/shade is multiplied into the kiss, so it sits in the paint rather than on top of it
+    blend: 0.63,          // 0-1: how much of the car's light/reflections shows through the kiss (0 = flat sticker)
   },
   depth: {
     nearIsWhite: true,
@@ -44,6 +44,10 @@ export const CONFIG = {
     smallFrac: 0.02,      // tight-crease scale (fraction of image width)
     largeFrac: 0.05,      // broader-recess scale
     gain: [16, 12],       // how strongly depth differences at each scale read as occlusion
+    normal: {             // finer occlusion read from the normal map (creases, gaps, vents), added to the depth occlusion
+      steps: [1, 4],      // fine and medium scale, in map pixels
+      gain: [0.5, 4],     // how strongly concavity at each scale reads as occlusion
+    },
   },
   sampleRadiusFrac: 0.006, // depth sampling window radius, fraction of map width
   warp: {

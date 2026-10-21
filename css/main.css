@@ -286,3 +286,10 @@ body.play .debug, body.play .debug * { cursor: auto; }
 }
 @keyframes glow { from { transform: scale(.94); } to { transform: scale(1.06); } }
 @media (prefers-reduced-motion: reduce) { .flame, .fire::before { animation: none; } }
+
+/* debug shading tuner */
+.debug { max-height: 90vh; overflow: auto; }
+.debug-paint { margin-top: 6px; }
+.debug-tune { margin-top: 6px; display: grid; gap: 3px; }
+.debug-tune label { display: grid; grid-template-columns: 170px 120px 3.2em; gap: 6px; align-items: center; }
+.debug-tune input[type=range] { width: 100%; }

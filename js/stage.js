@@ -14,6 +14,7 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss, onFit = 
   let overlay = 'none';
   let liftPending = false;
   let resizeTimer = 0;
+  let paint = null; // debug: flat colour painted over the whole car, through the kiss shading
 
   const drawKiss = (k) => decal.draw(ctx, k, cssW, cssH, dpr);
 
@@ -21,6 +22,7 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss, onFit = 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(carImg, 0, 0, cssW, cssH);
     for (const k of kisses) drawKiss(k);
+    if (paint) decal.paintCar(ctx, cssW, cssH, dpr, paint);
     const overlayCanvas = { depth: surface.depthCanvas, normal: surface.normalCanvas, mask: surface.maskCanvas, ao: surface.aoCanvas }[overlay];
     if (overlayCanvas) {
       ctx.globalAlpha = 0.7;
@@ -89,6 +91,9 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss, onFit = 
 
   return {
     enable() { enabled = true; },
+    setPaint(color) { paint = color; redraw(); },
+    refresh: redraw,
+    kissColor: decal.averageColor,
     setOverlay(name) { overlay = name; redraw(); },
     uvAt,
     probe,

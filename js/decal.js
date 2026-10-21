@@ -168,7 +168,12 @@ export function createDecal({ kissImg, carImg, surface }) {
       lo.g.globalCompositeOperation = 'source-over';
     }
     ctx.drawImage(lo.c, 0, 0, pw, ph, minX, minY, dw, dh);
+    shade(ctx, lo.c, pw, ph, minX, minY, dw, dh, cssW, cssH);
+  }
 
+  // Lighting passes shared by kisses and the debug paint layer. src is a pw x ph canvas of kiss pixels
+  // (its alpha says where they are), drawn at (minX, minY) with size dw x dh in CSS px.
+  function shade(ctx, src, pw, ph, minX, minY, dw, dh, cssW, cssH) {
     // Make the kiss take on the paint's lighting: the car under the kiss is multiplied in (so kisses in
     // shade sit darker, like lipstick on paint, not a bright sticker) and soft-light blended (so
     // highlights and reflections show through).
@@ -178,7 +183,7 @@ export function createDecal({ kissImg, carImg, surface }) {
       lit.g.drawImage(carImg, (minX / cssW) * carImg.naturalWidth, (minY / cssH) * carImg.naturalHeight,
         (dw / cssW) * carImg.naturalWidth, (dh / cssH) * carImg.naturalHeight, 0, 0, pw, ph);
       lit.g.globalCompositeOperation = 'destination-in';
-      lit.g.drawImage(lo.c, 0, 0, pw, ph, 0, 0, pw, ph);
+      lit.g.drawImage(src, 0, 0, pw, ph, 0, 0, pw, ph);
       ctx.save();
       ctx.globalCompositeOperation = 'multiply';
       ctx.globalAlpha = CONFIG.kiss.multiply;
@@ -189,14 +194,14 @@ export function createDecal({ kissImg, carImg, surface }) {
       ctx.restore();
     }
 
-    // Ambient occlusion from the depth map: kisses sitting in creases and recesses darken very slightly.
+    // Ambient occlusion (depth + normal map): kisses sitting in creases and recesses darken.
     if (CONFIG.kiss.ao > 0 && surface.aoCanvas) {
       const a = surface.aoCanvas;
       lit.g.globalCompositeOperation = 'source-over';
       lit.g.clearRect(0, 0, pw, ph);
       lit.g.drawImage(a, (minX / cssW) * a.width, (minY / cssH) * a.height, (dw / cssW) * a.width, (dh / cssH) * a.height, 0, 0, pw, ph);
       lit.g.globalCompositeOperation = 'destination-in';
-      lit.g.drawImage(lo.c, 0, 0, pw, ph, 0, 0, pw, ph);
+      lit.g.drawImage(src, 0, 0, pw, ph, 0, 0, pw, ph);
       ctx.save();
       ctx.globalAlpha = CONFIG.kiss.ao;
       ctx.drawImage(lit.c, 0, 0, pw, ph, minX, minY, dw, dh);
@@ -204,5 +209,30 @@ export function createDecal({ kissImg, carImg, surface }) {
     }
   }
 
-  return { draw };
+  // Debug: the whole car (inside the mask) as if edge-to-edge kisses, in one flat colour, through the
+  // same shading, so the shading settings can be judged and tuned across the entire car at once.
+  function paintCar(ctx, cssW, cssH, dpr, color) {
+    const pw = Math.round(cssW * dpr), ph = Math.round(cssH * dpr);
+    ensure(lo, pw, ph); ensure(lit, pw, ph);
+    lo.g.globalCompositeOperation = 'source-over';
+    lo.g.clearRect(0, 0, pw, ph);
+    lo.g.fillStyle = color;
+    lo.g.fillRect(0, 0, pw, ph);
+    const m = surface.maskAlphaCanvas;
+    if (m) {
+      lo.g.globalCompositeOperation = 'destination-in';
+      lo.g.drawImage(m, 0, 0, pw, ph);
+      lo.g.globalCompositeOperation = 'source-over';
+    }
+    ctx.drawImage(lo.c, 0, 0, pw, ph, 0, 0, cssW, cssH);
+    shade(ctx, lo.c, pw, ph, 0, 0, cssW, cssH, cssW, cssH);
+  }
+
+  // The kiss's average colour (alpha-weighted), as the default paint colour.
+  let r = 0, g = 0, b = 0, a = 0;
+  for (let i = 0; i < tw * th; i++) { r += tex[i * 4]; g += tex[i * 4 + 1]; b += tex[i * 4 + 2]; a += tex[i * 4 + 3]; }
+  const hex = (v) => Math.round(clamp(v / (a || 1), 0, 1) * 255).toString(16).padStart(2, '0');
+  const averageColor = `#${hex(r)}${hex(g)}${hex(b)}`;
+
+  return { draw, paintCar, averageColor };
 }
