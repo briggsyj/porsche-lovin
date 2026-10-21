@@ -1,0 +1,174 @@
+:root {
+  --light: 1;
+  --gold: #d8b25a;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #2a0407;
+  color: #f4e9d2;
+  font-family: Georgia, 'Times New Roman', serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- gate splash ---- */
+#splash {
+  display: none;
+  position: fixed;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--gold);
+  background: radial-gradient(ellipse at 50% 40%, #3a070d, #120405 70%);
+}
+#splash h1 { font-size: clamp(1.4rem, 5vw, 2.4rem); font-weight: 400; letter-spacing: .04em; }
+.keyhole {
+  width: 56px; height: 90px; margin: 0 auto 24px;
+  background:
+    radial-gradient(circle at 50% 28%, var(--gold) 0 18px, transparent 19px),
+    linear-gradient(var(--gold), var(--gold)) 50% 100% / 22px 55px no-repeat;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  -webkit-mask: radial-gradient(circle at 50% 28%, #000 0 18px, transparent 19px),
+    linear-gradient(#000, #000) 50% 100% / 22px 55px no-repeat;
+  mask: radial-gradient(circle at 50% 28%, #000 0 18px, transparent 19px),
+    linear-gradient(#000, #000) 50% 100% / 22px 55px no-repeat;
+}
+html.locked #splash { display: grid; }
+html.locked #app { display: none; }
+
+/* ---- curtains ---- */
+.curtains {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.55), transparent 28%, transparent 68%, rgba(0,0,0,.5)),
+    repeating-linear-gradient(90deg,
+      #6d0a12 0, #b3202c 2.5vw, #8f1019 4vw, #5a070e 5.5vw, #6d0a12 8vw);
+}
+.valance {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 6.5vh;
+  min-height: 36px;
+  z-index: 2;
+  background: linear-gradient(#3f050b, #8c0f19);
+  border-bottom: 3px solid var(--gold);
+  box-shadow: 0 6px 18px rgba(0,0,0,.6);
+}
+.valance::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 100%;
+  height: 22px;
+  background: radial-gradient(ellipse 28px 22px at 50% 0, #8c0f19 96%, transparent 100%) 0 0 / 56px 22px repeat-x;
+  filter: drop-shadow(0 4px 4px rgba(0,0,0,.45));
+}
+
+/* ---- stage ---- */
+.stage-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: calc(6.5vh + 28px) 3vw 3vh;
+}
+#stage {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: #111;
+  box-shadow: 0 20px 60px rgba(0,0,0,.7), 0 0 0 6px #2b1a10, 0 0 0 8px var(--gold);
+}
+
+/* ---- lighting ---- */
+.dark {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(ellipse 62% 56% at 50% 58%,
+    rgb(0 0 0 / calc((1 - var(--light)) * .22)) 0%,
+    rgb(0 0 0 / calc((1 - var(--light)) * .94)) 100%);
+}
+.lights { position: fixed; top: 0; left: 0; right: 0; height: 0; z-index: 7; pointer-events: none; }
+.lamp {
+  position: absolute;
+  top: 0;
+  left: var(--x);
+  width: 64px;
+  height: calc(6.5vh + 34px);
+  margin-left: -32px;
+}
+.lamp::before { /* cord + shade */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(#222, #222) 50% 0 / 2px calc(100% - 30px) no-repeat,
+    linear-gradient(#caa24a, #6b4f14) 0 100% / 100% 30px no-repeat;
+  clip-path: polygon(49% 0, 51% 0, 51% calc(100% - 30px), 100% 100%, 0 100%, 49% calc(100% - 30px));
+  filter: brightness(calc(.35 + var(--light) * .65));
+}
+.lamp::after { /* bulb glow + cone */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 4px);
+  width: 46vw;
+  height: 78vh;
+  transform: translateX(-50%);
+  background: linear-gradient(rgb(255 226 160 / .5), transparent 85%);
+  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+  opacity: var(--light);
+  mix-blend-mode: screen;
+}
+
+/* ---- cursor follower ---- */
+#follower {
+  position: fixed;
+  left: 0; top: 0;
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  will-change: transform;
+}
+#follower.on { opacity: 1; }
+#follower { --k: 0; }
+#follower.kiss { --k: 1; }
+#follower img {
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* On click the person bends: the head end leans away from the viewer, easing off toward the feet.
+   At rest the single .main image shows; during the lean it's swapped for the bent strips. */
+#follower .strips { position: absolute; left: 0; top: 0; visibility: hidden; }
+#follower .strips img { position: absolute; left: 0; top: 0; transition: transform .12s ease-out; }
+#follower.kiss .strips { visibility: visible; }
+#follower.kiss .main { visibility: hidden; }
+body.play, body.play * { cursor: none; }
+
+/* ---- debug ---- */
+.debug {
+  position: fixed;
+  left: 8px; bottom: 8px;
+  z-index: 20;
+  padding: 8px;
+  font: 12px/1.4 ui-monospace, Menlo, monospace;
+  color: #cfe;
+  background: rgb(0 0 0 / .75);
+  border-radius: 6px;
+}
+.debug button { font: inherit; margin-right: 4px; }
+.debug pre { margin: 6px 0 0; min-width: 24ch; }
+body.play .debug, body.play .debug * { cursor: auto; }

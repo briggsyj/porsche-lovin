@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Porsche Lovin'</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/heart.svg">
+  <link rel="stylesheet" href="./css/main.css">
+  <link rel="stylesheet" href="./css/controls.css">
+  <script>
+    // Client-side gate: a deterrent for accidental visitors only.
+    (function () {
+      var ok = false;
+      try { ok = new URLSearchParams(location.search).get('pw') === 'g'; } catch (e) {}
+      if (!ok) document.documentElement.classList.add('locked');
+    })();
+  </script>
+</head>
+<body>
+  <div id="splash">
+    <div>
+      <div class="keyhole" aria-hidden="true"></div>
+      <h1>You're missing the magic word</h1>
+    </div>
+  </div>
+
+  <div id="app">
+    <div class="curtains"></div>
+    <div class="valance"></div>
+
+    <div class="stage-wrap">
+      <canvas id="stage" aria-label="A Porsche, waiting to be kissed"></canvas>
+    </div>
+
+    <div class="dark"></div>
+    <div class="lights" aria-hidden="true">
+      <div class="lamp" style="--x:16%"></div>
+      <div class="lamp" style="--x:50%"></div>
+      <div class="lamp" style="--x:84%"></div>
+    </div>
+
+    <div id="follower" aria-hidden="true"><img class="main" alt="" draggable="false"><div class="strips"></div></div>
+
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="panel">
+        <section id="step-lights" class="step">
+          <h2 id="modal-title">Dim the lights</h2>
+          <p>Turn the knob counter-clockwise.</p>
+          <div class="knob-wrap">
+            <div class="ticks" id="ticks"></div>
+            <span class="knob-label l">Dim</span>
+            <span class="knob-label r">Bright</span>
+            <div id="knob" class="knob" role="slider" tabindex="0" aria-label="Lights"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="knob-rot">
+                <div class="knob-cap"></div>
+                <div class="knob-indicator"></div>
+              </div>
+              <div class="knob-gloss"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="step-jazz" class="step" hidden>
+          <h2>Turn up the jazz</h2>
+          <p>Slide the fader up.</p>
+          <div class="hifi">
+            <div class="hifi-body">
+              <div class="hifi-plate">
+                <div class="hifi-brand"><span>HI&#8209;FI</span><i></i><span>STEREO</span></div>
+                <div class="vu-row">
+                  <div class="vu"><div class="vu-needle" id="needleL"></div><b>L</b></div>
+                  <div class="vu"><div class="vu-needle" id="needleR"></div><b>R</b></div>
+                </div>
+                <div id="fader" class="fader" role="slider" tabindex="0" aria-label="Jazz volume"
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div class="fader-rail">
+                    <div class="fader-fill"></div>
+                    <div class="fader-handle"></div>
+                  </div>
+                </div>
+                <div class="fader-labels"><span>Low</span><span>Jazz</span><span>Loud</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    if (!document.documentElement.classList.contains('locked')) import('./js/main.js');
+  </script>
+</body>
+</html>
