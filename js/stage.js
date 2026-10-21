@@ -33,7 +33,7 @@ export function createStage({ canvas, carImg, kissImg, surface, onKiss, onFit = 
 
   function fit() {
     const availW = window.innerWidth * 0.94 - 16;
-    const strip = window.matchMedia('(max-width: 900px) and (orientation: portrait)').matches ? 96 : 0; // score strip on phones
+    const strip = window.matchMedia('(max-width: 900px) and (orientation: portrait)').matches ? 128 : 0; // score panel on phones
     const availH = window.innerHeight - (window.innerHeight * 0.065 + 28) - 100 - 24 - strip; // minus valance above, candles below
     cssW = Math.max(120, Math.floor(Math.min(availW, availH * aspect)));
     cssH = Math.floor(cssW / aspect);
