@@ -8,6 +8,7 @@ import { createAudio } from './audio.js';
 import { runIntro } from './intro.js';
 import { createSpotlight } from './spotlight.js';
 import { createCandles } from './candles.js';
+import { createShare } from './share.js';
 import { createDebug } from './debug.js';
 
 const params = new URLSearchParams(location.search);
@@ -62,6 +63,7 @@ async function boot() {
   await ready;
 
   stage.enable();
+  createShare({ getCount: () => stage.kissCount });
   document.body.classList.add('play');
 
   // The person faces the way the surface under the cursor faces. The normal map is averaged over a wide
