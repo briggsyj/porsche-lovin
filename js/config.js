@@ -70,6 +70,7 @@ export const CONFIG = {
       smoothMs: 60,       // the averaged value is also smoothed a little over time
       threshold: 0.08,    // average sideways lean needed to switch (a small dead zone stops flip-flopping on flat areas)
       dwellMs: 120,       // minimum time between flips
+      sample: { x: 0.82, y: 0.09 }, // where the head sits in person.png (0-1); the surface is sampled here rather than under the lips
     },
     depthScale: {
       min: 0.3,           // smallest fraction of full size, for the furthest parts of the scene

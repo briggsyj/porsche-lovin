@@ -75,7 +75,9 @@ async function boot() {
       follower.setDepth(surface.surfaceAt(uv.u, uv.v).depth, surface.nearDepth);
       const { radiusFrac, smoothMs, threshold, dwellMs } = CONFIG.person.facing;
       const now = performance.now();
-      facing += (surface.facingAt(uv.u, uv.v, radiusFrac) - facing) * (1 - Math.exp(-(now - lastSample) / smoothMs));
+      const head = follower.headAt(e.clientX, e.clientY);
+      const headUv = stage.uvAt(head.x, head.y) || uv; // head can hang off the image edge: fall back to the lips
+      facing += (surface.facingAt(headUv.u, headUv.v, radiusFrac) - facing) * (1 - Math.exp(-(now - lastSample) / smoothMs));
       lastSample = now;
       if (now - lastFlip > dwellMs && ((!flipped && facing > threshold) || (flipped && facing < -threshold))) {
         flipped = !flipped;
