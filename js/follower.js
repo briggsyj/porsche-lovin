@@ -7,11 +7,11 @@ export function createFollower({ el, personImg }) {
   const strips = el.querySelector('.strips');
   img.src = personImg.src;
   let ax = 0, ay = 0, x = -9999, y = -9999, raf = 0, hideTimer = 0;
-  let scale = 1, scaleTarget = 1;
+  let scale = 1, scaleTarget = 1, w = 0, h = 0, flipped = false;
 
   function layout() {
-    const h = Math.min((window.innerHeight * CONFIG.person.heightVh) / 100, CONFIG.person.maxHeightPx);
-    const w = (h * personImg.naturalWidth) / personImg.naturalHeight;
+    h = Math.min((window.innerHeight * CONFIG.person.heightVh) / 100, CONFIG.person.maxHeightPx);
+    w = (h * personImg.naturalWidth) / personImg.naturalHeight;
     img.style.height = `${h}px`;
     img.style.width = `${w}px`;
     ax = w * CONFIG.person.anchor.x;
@@ -80,7 +80,14 @@ export function createFollower({ el, personImg }) {
       scaleTarget = Math.min(1, Math.max(min, Math.pow(depth / nearDepth, strength)));
       if (!raf) raf = requestAnimationFrame(paint);
     },
-    setFlipped(flipped) { body.classList.toggle('flipped', flipped); },
+    setFlipped(f) { flipped = f; body.classList.toggle('flipped', f); },
+    // Screen position of the head for a cursor at (cx, cy): offset from the lips, scaled with depth, mirrored when flipped.
+    headAt(cx, cy) {
+      const { x: sx, y: sy } = CONFIG.person.facing.sample;
+      const dx = (sx - CONFIG.person.anchor.x) * w * scaleTarget;
+      const dy = (sy - CONFIG.person.anchor.y) * h * scaleTarget;
+      return { x: cx + (flipped ? -dx : dx), y: cy + dy };
+    },
     show() { clearTimeout(hideTimer); el.classList.add('on'); },
     hide(delay = 0) { clearTimeout(hideTimer); hideTimer = setTimeout(() => el.classList.remove('on'), delay); },
     pulse() { el.classList.add('kiss'); setTimeout(() => el.classList.remove('kiss'), 140); },
