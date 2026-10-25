@@ -1,11 +1,11 @@
 # Porsche Lovin'
 
-Static site: no build step. Open it at `/?pw=g` (without `pw=g` you get the "magic word" splash).
+Static site: no build step.
 
 ## Run locally
 Serve over HTTP (opening `index.html` via `file://` blocks reading the depth/normal maps):
 
-    python3 -m http.server 8000   # then visit http://localhost:8000/?pw=g
+    python3 -m http.server 8000   # then visit http://localhost:8000
 
 Extra URL params: `debug=1` (depth/normal overlay + readout), `skip=1` (skip the intro modal).
 
@@ -24,4 +24,4 @@ Drop these into `assets/`. Anything missing falls back to a generated placeholde
 Tunables (knob speed, thresholds, depth/normal behaviour, kiss size) are in `js/config.js`.
 
 ## Deploy
-Push to GitHub, then Settings → Pages → deploy from `main` / root. Visit `https://<user>.github.io/<repo>/?pw=g`.
+Push to GitHub, then Settings → Pages → deploy from `main` / root. Visit `https://<user>.github.io/<repo>/`.
