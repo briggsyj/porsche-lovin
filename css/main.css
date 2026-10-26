@@ -15,6 +15,7 @@ html, body {
   color: #f4e9d2;
   font-family: Georgia, 'Times New Roman', serif;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* no double-tap zoom on iOS, so quick repeat taps register as taps */
 }
 
 /* ---- gate splash ---- */
