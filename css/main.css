@@ -1,0 +1,352 @@
+:root {
+  --light: 1;
+  --spot-lift: .45; /* how much the spotlight brings the car back up as the room dims */
+  --gold: #d8b25a;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #2a0407;
+  color: #f4e9d2;
+  font-family: Georgia, 'Times New Roman', serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* no double-tap zoom on iOS, so quick repeat taps register as taps */
+}
+
+/* ---- gate splash ---- */
+#splash {
+  display: none;
+  position: fixed;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--gold);
+  background: radial-gradient(ellipse at 50% 40%, #3a070d, #120405 70%);
+}
+#splash h1 { font-size: clamp(1.4rem, 5vw, 2.4rem); font-weight: 400; letter-spacing: .04em; }
+.keyhole {
+  width: 56px; height: 90px; margin: 0 auto 24px;
+  background:
+    radial-gradient(circle at 50% 28%, var(--gold) 0 18px, transparent 19px),
+    linear-gradient(var(--gold), var(--gold)) 50% 100% / 22px 55px no-repeat;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  -webkit-mask: radial-gradient(circle at 50% 28%, #000 0 18px, transparent 19px),
+    linear-gradient(#000, #000) 50% 100% / 22px 55px no-repeat;
+  mask: radial-gradient(circle at 50% 28%, #000 0 18px, transparent 19px),
+    linear-gradient(#000, #000) 50% 100% / 22px 55px no-repeat;
+}
+html.locked #splash { display: grid; }
+html.locked #app { display: none; }
+
+/* ---- curtains ---- */
+.curtains {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.55), transparent 28%, transparent 68%, rgba(0,0,0,.5)),
+    repeating-linear-gradient(90deg,
+      #6d0a12 0, #b3202c 2.5vw, #8f1019 4vw, #5a070e 5.5vw, #6d0a12 8vw);
+}
+.valance {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 6.5vh;
+  min-height: 36px;
+  z-index: 2;
+  background: linear-gradient(#3f050b, #8c0f19);
+  border-bottom: 3px solid var(--gold);
+  box-shadow: 0 6px 18px rgba(0,0,0,.6);
+}
+.valance::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 100%;
+  height: 22px;
+  background: radial-gradient(ellipse 28px 22px at 50% 0, #8c0f19 96%, transparent 100%) 0 0 / 56px 22px repeat-x;
+  filter: drop-shadow(0 4px 4px rgba(0,0,0,.45));
+}
+
+/* ---- stage ---- */
+.stage-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: calc(6.5vh + 28px) 3vw 100px; /* bottom space is for the candles */
+}
+#stage {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: #111;
+  box-shadow: 0 20px 60px rgba(0,0,0,.7), 0 0 0 6px #2b1a10, 0 0 0 8px var(--gold);
+}
+
+/* ---- lighting ---- */
+.dark {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(ellipse 62% 56% at 50% 58%,
+    rgb(0 0 0 / calc((1 - var(--light)) * .22)) 0%,
+    rgb(0 0 0 / calc((1 - var(--light)) * .94)) 100%);
+}
+/* A gentle spotlight over the car: re-brightens whatever is behind it, only inside the (feathered) car
+   mask, and only as far as the room is dimmed. Positioned and masked by js/spotlight.js. */
+.spot {
+  position: fixed;
+  z-index: 6;
+  pointer-events: none;
+  -webkit-backdrop-filter: brightness(calc(1 + (1 - var(--light)) * var(--spot-lift)));
+  backdrop-filter: brightness(calc(1 + (1 - var(--light)) * var(--spot-lift)));
+  background: rgb(255 214 150 / calc((1 - var(--light)) * .07));
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.lights { position: fixed; top: 0; left: 0; right: 0; height: 0; z-index: 7; pointer-events: none; }
+.lamp {
+  position: absolute;
+  top: 0;
+  left: var(--x);
+  width: 64px;
+  height: calc(6.5vh + 34px);
+  margin-left: -32px;
+}
+.lamp::before { /* cord + shade */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(#222, #222) 50% 0 / 2px calc(100% - 30px) no-repeat,
+    linear-gradient(#caa24a, #6b4f14) 0 100% / 100% 30px no-repeat;
+  clip-path: polygon(49% 0, 51% 0, 51% calc(100% - 30px), 100% 100%, 0 100%, 49% calc(100% - 30px));
+  filter: brightness(calc(.35 + var(--light) * .65));
+}
+.lamp::after { /* bulb glow + cone */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 4px);
+  width: 46vw;
+  height: 78vh;
+  transform: translateX(-50%);
+  background: linear-gradient(rgb(255 226 160 / .5), transparent 85%);
+  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+  opacity: var(--light);
+  mix-blend-mode: screen;
+}
+
+/* ---- cursor follower ---- */
+#follower {
+  position: fixed;
+  left: 0; top: 0;
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  will-change: transform;
+}
+#follower.on { opacity: 1; }
+#follower { --k: 0; }
+/* Flips (card-style, about the lips) when the cursor is in the right half of the image. */
+#follower .body {
+  position: relative;
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform .18s ease-in-out;
+}
+#follower .body.flipped { transform: perspective(900px) rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) { #follower .body { transition: none; } }
+#follower.kiss { --k: 1; }
+#follower img {
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* On click the person bends: the head end leans away from the viewer, easing off toward the feet.
+   At rest the single .main image shows; during the lean it's swapped for the bent strips. */
+#follower .strips { position: absolute; left: 0; top: 0; visibility: hidden; }
+#follower .strips img { position: absolute; left: 0; top: 0; transition: transform .12s ease-out; }
+#follower.kiss .strips { visibility: visible; }
+#follower.kiss .main { visibility: hidden; }
+body.play, body.play * { cursor: none; }
+
+/* ---- debug ---- */
+.debug {
+  position: fixed;
+  left: 8px; bottom: 8px;
+  z-index: 20;
+  padding: 8px;
+  font: 12px/1.4 ui-monospace, Menlo, monospace;
+  color: #cfe;
+  background: rgb(0 0 0 / .75);
+  border-radius: 6px;
+}
+.debug button { font: inherit; margin-right: 4px; }
+.debug pre { margin: 6px 0 0; min-width: 24ch; }
+body.play .debug, body.play .debug * { cursor: auto; }
+
+/* ---- candles ---- */
+.candles {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 108px;
+  z-index: 7; /* above the dimming layer: candles stay lit, and glow more as the room goes dark */
+  pointer-events: none;
+}
+.candles::before { /* soft shadow on the floor they stand on */
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 34px;
+  background: linear-gradient(transparent, rgb(0 0 0 / .55));
+}
+.candle {
+  position: absolute;
+  bottom: var(--y, 0px);
+  left: var(--x, 0px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%) scale(var(--s, 1));
+  transform-origin: 50% 100%;
+}
+.candle::after { /* contact shadow */
+  content: '';
+  position: absolute;
+  left: -20%; right: -20%; bottom: -3px;
+  height: 8px;
+  background: radial-gradient(ellipse, rgb(0 0 0 / .6), transparent 70%);
+  z-index: -1;
+}
+.fire { position: relative; width: 12px; height: 26px; margin-bottom: -3px; transform: scale(var(--fs, 1)); transform-origin: 50% 100%; }
+.fire::before { /* warm glow, stronger the darker the room */
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 150px; height: 150px;
+  margin: -75px 0 0 -75px;
+  background: radial-gradient(circle, rgb(255 170 70 / calc(.28 + (1 - var(--light)) * .42)) 0%, rgb(255 140 40 / calc(.08 + (1 - var(--light)) * .12)) 40%, transparent 70%);
+  mix-blend-mode: screen;
+  animation: glow var(--speed, 1.4s) ease-in-out var(--delay, 0s) infinite alternate;
+}
+.flame {
+  position: absolute;
+  inset: 0;
+  border-radius: 50% 50% 50% 50% / 80% 80% 20% 20%;
+  background: radial-gradient(ellipse at 50% 78%, #fffbe0 0 22%, #ffd45a 50%, #ff8a1f 80%, rgb(255 90 10 / 0) 100%);
+  transform-origin: 50% 100%;
+  animation: flicker var(--speed, 1.4s) ease-in-out var(--delay, 0s) infinite alternate;
+  filter: drop-shadow(0 0 5px rgb(255 160 50 / .9));
+}
+.wick { width: 2px; height: 7px; background: #2a2018; margin-bottom: -1px; }
+.wax {
+  position: relative;
+  width: var(--w, 16px);
+  height: var(--h, 36px);
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(90deg, #cdbf9f, #f6edd8 45%, #c9bb9a);
+  box-shadow: inset 0 3px 0 rgb(255 255 255 / .35);
+}
+.wax::before { /* a drip */
+  content: '';
+  position: absolute;
+  left: 3px; top: 0;
+  width: 4px; height: 40%;
+  border-radius: 0 0 3px 3px;
+  background: rgb(255 255 255 / .45);
+}
+.dish {
+  width: calc(var(--w, 16px) + 28px); height: 9px;
+  border-radius: 50% 50% 8px 8px / 100% 100% 40% 40%;
+  background: linear-gradient(#e6c673, #8a6a2c);
+  box-shadow: 0 2px 4px rgba(0,0,0,.6);
+}
+.candle.pillar .wax { border-radius: 4px 4px 2px 2px; background: linear-gradient(90deg, #d8c3a2, #f3e6cc 40%, #c2ad8a); }
+.candle.pillar .dish { background: linear-gradient(#c9ccd1, #6f7378); }
+.candle.tealight .wick { height: 4px; }
+.candle.tealight .wax { height: 5px; width: 22px; border-radius: 2px 2px 0 0; }
+.candle.tealight .dish { width: 30px; height: 10px; border-radius: 3px 3px 5px 5px / 3px 3px 8px 8px; background: linear-gradient(90deg, #8d9196, #e4e6e9 45%, #7b7f84); }
+@keyframes flicker {
+  0%   { transform: scale(1, 1) rotate(-2deg); }
+  20%  { transform: scale(.92, 1.08) rotate(1.5deg); }
+  45%  { transform: scale(1.05, .94) rotate(-1deg); }
+  70%  { transform: scale(.95, 1.1) rotate(2deg); }
+  100% { transform: scale(1, .97) rotate(-1.5deg); }
+}
+@keyframes glow { from { transform: scale(.94); } to { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .flame, .fire::before { animation: none; } }
+
+/* debug shading tuner */
+.debug { max-height: 90vh; overflow: auto; }
+.debug-paint { margin-top: 6px; }
+.debug-tune { margin-top: 6px; display: grid; gap: 3px; }
+.debug-tune label { display: grid; grid-template-columns: 170px 120px 3.2em; gap: 6px; align-items: center; }
+.debug-tune input[type=range] { width: 100%; }
+
+/* ---- share (the live score panel) ---- */
+.share { display: none; position: fixed; top: calc(6.5vh + 44px); right: 16px; z-index: 12; font-family: Georgia, 'Times New Roman', serif; }
+body.play .share { display: block; }
+body.play .share, body.play .share * { cursor: default; }
+body.play .share-copy { cursor: pointer; }
+.share-panel {
+  position: relative;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+  width: 248px;
+  padding: 12px 14px; text-align: center;
+  background: linear-gradient(160deg, #2b2118, #14100c);
+  border: 2px solid #8a6a2c; border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.65);
+}
+.share-panel p { margin: 0; }
+.share-line { font-size: .85rem; color: #bda97d; font-style: italic; }
+.share-count { color: var(--gold); line-height: 1; }
+.share-count b { font-size: 2.4rem; font-weight: 400; }
+.share-count span { font-size: 1.05rem; }
+.share-rank { font-size: 1.1rem; line-height: 1.2; color: #f4e9d2; }
+.share-compliment { margin-top: 2px; font-size: .85rem; line-height: 1.35; color: #bda97d; font-style: italic; }
+.share-copy {
+  padding: 8px 14px; min-height: 44px;
+  font: inherit; font-size: .95rem; color: #14100c;
+  background: var(--gold); border: 0; border-radius: 999px;
+}
+.share-copy:hover, .share-copy:focus-visible { background: #f2d58a; outline: none; }
+.share-status { /* floats just under the panel so it never changes the panel's size */
+  position: absolute; left: 0; right: 0; top: 100%; margin-top: 6px !important;
+  padding: 4px 8px; text-align: center; font-size: .8rem; color: #f4e9d2;
+  background: rgb(20 16 12 / .92); border-radius: 8px;
+}
+.share-status:empty { display: none; }
+
+/* Portrait phones and narrow screens: a slim panel across the top (score, rank and button on one row, the
+   compliment on a full-width row beneath), with room reserved for it above the picture. */
+@media (max-width: 900px) and (orientation: portrait) {
+  .share { top: calc(6.5vh + 32px); left: 8px; right: 8px; }
+  .share-panel {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "score rank btn" "comp comp comp";
+    align-items: center; column-gap: 10px; row-gap: 4px;
+    width: auto; padding: 8px 10px; text-align: left;
+  }
+  .share-score { grid-area: score; text-align: center; }
+  .share-text { display: contents; }
+  .share-rank { grid-area: rank; font-size: .95rem; }
+  .share-compliment { grid-area: comp; margin-top: 0; font-size: .74rem; line-height: 1.3; }
+  .share-copy { grid-area: btn; max-width: 84px; padding: 6px 10px; font-size: .8rem; line-height: 1.15; }
+  .share-line { font-size: .62rem; }
+  .share-count b { font-size: 1.9rem; }
+  .share-count span { font-size: .8rem; }
+  .stage-wrap { padding-top: calc(6.5vh + 28px + 128px); }
+}
